@@ -50,6 +50,17 @@ def shutdown():
     logger.info("API shutdown")
 
 
+@app.get("/health")
+def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "service": "Olympics TV API",
+        "version": "1.0.0",
+        "environment": os.getenv("ENVIRONMENT", "development")
+    }
+
+
 @app.get("/api/schedule/{date}", response_model=ScheduleResponse)
 def get_schedule(date: str):
     """
