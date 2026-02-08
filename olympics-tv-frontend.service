@@ -1,0 +1,43 @@
+[Unit]
+Description=Olympics TV Next.js Frontend
+After=network.target
+Documentation=https://github.com/stosh99/olympics-tv
+PartOf=olympics-tv.service
+
+[Service]
+Type=simple
+User=olympics
+Group=olympics
+WorkingDirectory=/home/olympics/olympics-tv/winter-olympics-tv-scheduleV0
+
+# Environment variables
+Environment="NODE_ENV=production"
+EnvironmentFile=/home/olympics/olympics-tv/.env
+
+# Pre-start: ensure build exists
+ExecStartPre=/usr/bin/test -d /home/olympics/olympics-tv/winter-olympics-tv-scheduleV0/.next
+
+# Start the application
+ExecStart=/home/olympics/olympics-tv/venv/bin/npm start
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=2048
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Standard output
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=olympics-tv-frontend
+
+[Install]
+WantedBy=multi-user.target
