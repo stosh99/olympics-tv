@@ -4,6 +4,9 @@ NBC Olympics Broadcast Schedule Scraper
 Loads Winter Olympics 2026 TV broadcast schedules from NBC into PostgreSQL database
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import json
 import requests

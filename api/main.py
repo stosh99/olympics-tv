@@ -2,11 +2,15 @@
 FastAPI backend for Olympics TV schedule
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from typing import Optional, List, Dict
 import logging
+import os
 
 from api.database import init_connection_pool, close_all_connections, execute_query_dict
 from api.models import (

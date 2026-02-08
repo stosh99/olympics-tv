@@ -2,9 +2,13 @@
 Database connection and pooling
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import psycopg2
 from psycopg2 import pool
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
