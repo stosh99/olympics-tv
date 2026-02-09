@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react"
@@ -51,7 +52,7 @@ export default function ComingUpNext() {
         const today = formatDateParam(new Date())
         const data = await fetchTvSchedule(today)
         const all = flattenBroadcasts(data.networks)
-        const next = all.filter((b) => isUpcoming(b) && !b.is_replay).slice(0, 12)
+        const next = all.filter((b) => isUpcoming(b)).slice(0, 12)
         setUpcoming(next)
       } catch (err) {
         console.error("Failed to load upcoming:", err)
@@ -132,7 +133,18 @@ export default function ComingUpNext() {
             >
               <CardContent className="p-2">
                 <div className="flex items-center justify-between mb-1">
-                  <NetworkBadge network={broadcast.network_name} />
+                  <div className="flex items-center gap-1.5">
+                    <NetworkBadge network={broadcast.network_name} />
+                    {broadcast.is_replay ? (
+                      <Badge variant="secondary" className="text-xs font-semibold">
+                        REPLAY
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="text-xs font-semibold">
+                        LIVE
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <Clock className="h-3 w-3" />
                     <span className="text-xs">{formatTime(broadcast.start_time)}</span>

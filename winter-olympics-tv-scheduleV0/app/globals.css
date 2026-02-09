@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+@source inline("bg-sky-500 bg-amber-600 bg-slate-700 bg-green-600 bg-red-500 bg-pink-500 bg-orange-500 bg-blue-700 bg-indigo-600 bg-teal-600 bg-rose-600 bg-zinc-600 bg-cyan-600 bg-violet-600 bg-emerald-500 bg-gray-500 bg-blue-600 bg-emerald-600 bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 from-blue-500 via-purple-500 to-pink-500 from-yellow-500 to-amber-600");
+
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

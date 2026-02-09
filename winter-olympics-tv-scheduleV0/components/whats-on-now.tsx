@@ -11,6 +11,7 @@ import {
   fetchTvSchedule,
   flattenBroadcasts,
   isLiveNow,
+  isOnNow,
   getDisciplineFromBroadcast,
   formatDateParam,
   type Broadcast,
@@ -76,7 +77,7 @@ export default function WhatsOnNow() {
         const today = formatDateParam(new Date())
         const data = await fetchTvSchedule(today)
         const all = flattenBroadcasts(data.networks)
-        const live = all.filter((b) => isLiveNow(b))
+        const live = all.filter((b) => isOnNow(b))
         setLiveBroadcasts(live)
       } catch (err) {
         console.error("Failed to load live broadcasts:", err)
@@ -182,9 +183,15 @@ export default function WhatsOnNow() {
                 <CardContent className="p-2">
                   <div className="flex items-center justify-between mb-1">
                     <NetworkBadge network={broadcast.network_name} />
-                    <Badge variant="destructive" className="text-xs font-semibold animate-pulse">
-                      LIVE
-                    </Badge>
+                    {broadcast.is_replay ? (
+                      <Badge variant="secondary" className="text-xs font-semibold">
+                        REPLAY
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-xs font-semibold animate-pulse">
+                        LIVE
+                      </Badge>
+                    )}
                   </div>
 
                   <h3 className="font-semibold text-foreground mb-1 line-clamp-1 text-sm">

@@ -755,7 +755,7 @@ export default function ScheduleGrid() {
               }}
             >
               <Globe className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">All Events</span>
+              <span className="hidden sm:inline">Event Schedule</span>
               <span className="sm:hidden">All</span>
             </button>
           </div>
