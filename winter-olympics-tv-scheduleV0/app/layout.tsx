@@ -8,9 +8,10 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://watcholympics2026.com'),
   title: 'Winter Olympics 2026 Milano Cortina - TV Schedule',
   description: 'Complete TV schedule for the 2026 Winter Olympics in Milano Cortina. Find live events, replays, and commentary across NBC, USA, CNBC, and Peacock.',
-  generator: 'v0.app',
+  keywords: ['Winter Olympics 2026', 'Milano Cortina', 'Olympic TV Schedule', 'NBC Olympics', 'Peacock Olympics', 'Olympic medals', 'Winter Games 2026'],
   icons: {
     icon: [
       {
@@ -28,6 +29,28 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-icon.png',
   },
+  openGraph: {
+    title: 'Winter Olympics 2026 Milano Cortina - TV Schedule & Results',
+    description: 'Complete NBC TV schedule for the 2026 Winter Olympics. Live events, replays, and AI commentary across NBC, USA, CNBC, and Peacock.',
+    url: 'https://watcholympics2026.com',
+    siteName: 'Watch Olympics 2026',
+    locale: 'en_US',
+    type: 'website',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Winter Olympics 2026 Milano Cortina TV Schedule',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Winter Olympics 2026 Milano Cortina - TV Schedule & Results',
+    description: 'Complete NBC TV schedule for the 2026 Winter Olympics. Live events, replays, and AI commentary across NBC, USA, CNBC, and Peacock.',
+    images: ['/og-image.png'],
+  },
 }
 
 export default function RootLayout({
@@ -35,9 +58,57 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Watch Olympics 2026",
+      "url": "https://watcholympics2026.com",
+      "description": "Complete NBC TV schedule for the 2026 Winter Olympics in Milano Cortina. Live events, replays, and AI commentary.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://watcholympics2026.com?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SportsEvent",
+      "name": "2026 Winter Olympics",
+      "description": "The XXV Olympic Winter Games held across Milano, Cortina d'Ampezzo, Bormio, Livigno, Predazzo, Tesero, and Anterselva in Italy.",
+      "startDate": "2026-02-06",
+      "endDate": "2026-02-22",
+      "eventStatus": "https://schema.org/EventScheduled",
+      "eventAttendanceMode": "https://schema.org/MixedEventAttendanceMode",
+      "location": {
+        "@type": "Place",
+        "name": "Milano Cortina",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "IT",
+          "addressRegion": "Lombardy, Veneto, Trentino-Alto Adige"
+        }
+      },
+      "organizer": {
+        "@type": "Organization",
+        "name": "International Olympic Committee",
+        "url": "https://www.olympics.com"
+      },
+      "broadcaster": {
+        "@type": "Organization",
+        "name": "NBCUniversal",
+        "url": "https://www.nbcolympics.com"
+      }
+    }
+  ];
+
   return (
     <html lang="en">
       <body className={`font-sans antialiased`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         {children}
         <Analytics />
       </body>

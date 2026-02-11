@@ -171,7 +171,9 @@ class NBCScraper:
             start_time = self.unix_to_timestamptz(single_event.get('startDate'))
             end_time = self.unix_to_timestamptz(single_event.get('endDate'))
             network = single_event.get('network', {})
-            network_name = network.get('name') if network else None
+            network_name = network.get('name') if network else 'Peacock'
+            if not network_name:
+                network_name = 'Peacock'
             day_part = single_event.get('dayPart')
             summary = single_event.get('summary')
             short_description = single_event.get('shortDescription')
@@ -191,7 +193,21 @@ class NBCScraper:
                 "summary, video_url, stream_type, is_medal_session, olympic_day, tier, last_modified, is_replay, peacock_url, short_description"
                 ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 "ON CONFLICT (drupal_id) DO UPDATE SET "
-                "title = EXCLUDED.title, start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time "
+                "title = EXCLUDED.title, "
+                "short_title = EXCLUDED.short_title, "
+                "start_time = EXCLUDED.start_time, "
+                "end_time = EXCLUDED.end_time, "
+                "network_name = EXCLUDED.network_name, "
+                "day_part = EXCLUDED.day_part, "
+                "summary = EXCLUDED.summary, "
+                "short_description = EXCLUDED.short_description, "
+                "video_url = EXCLUDED.video_url, "
+                "peacock_url = EXCLUDED.peacock_url, "
+                "stream_type = EXCLUDED.stream_type, "
+                "is_medal_session = EXCLUDED.is_medal_session, "
+                "is_replay = EXCLUDED.is_replay, "
+                "tier = EXCLUDED.tier, "
+                "last_modified = EXCLUDED.last_modified "
                 "RETURNING (xmax = 0) as inserted",
                 (
                     drupal_id, title, short_title, start_time, end_time, network_name, day_part,
@@ -270,7 +286,9 @@ class NBCScraper:
                     "INSERT INTO nbc_broadcast_rundown (broadcast_drupal_id, segment_order, header, description, segment_time) "
                     "VALUES (%s, %s, %s, %s, %s) "
                     "ON CONFLICT (broadcast_drupal_id, segment_order) DO UPDATE SET "
-                    "header = EXCLUDED.header, description = EXCLUDED.description "
+                    "header = EXCLUDED.header, "
+                    "description = EXCLUDED.description, "
+                    "segment_time = EXCLUDED.segment_time "
                     "RETURNING (xmax = 0) as inserted",
                     (drupal_id, idx, header, description, segment_time)
                 )

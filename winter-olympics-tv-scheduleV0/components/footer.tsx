@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { ExternalLink } from "lucide-react"
 
 export default function Footer() {
@@ -6,6 +7,12 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Official Links */}
         <div className="flex flex-wrap justify-center gap-6 mb-4">
+          <Link
+            href="/faq"
+            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
+          >
+            FAQ
+          </Link>
           <a
             href="https://www.milanocortina2026.olympics.com"
             target="_blank"

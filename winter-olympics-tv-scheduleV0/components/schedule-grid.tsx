@@ -656,6 +656,7 @@ export default function ScheduleGrid() {
   const showAllSports = () => {
     setSelectedSport(null)
     setShowCheckedOnly(false)
+    setCheckedSports(new Set())
   }
 
   const changeDate = (days: number) => {

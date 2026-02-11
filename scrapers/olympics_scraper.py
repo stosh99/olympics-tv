@@ -222,6 +222,13 @@ class OlympicsScraper:
                 ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 "ON CONFLICT (event_unit_code) DO UPDATE SET "
                 "event_unit_name = EXCLUDED.event_unit_name, "
+                "phase_name = EXCLUDED.phase_name, "
+                "start_time = EXCLUDED.start_time, "
+                "end_time = EXCLUDED.end_time, "
+                "status = EXCLUDED.status, "
+                "medal_flag = EXCLUDED.medal_flag, "
+                "live_flag = EXCLUDED.live_flag, "
+                "competitors_json = EXCLUDED.competitors_json, "
                 "updated_at = EXCLUDED.updated_at "
                 "RETURNING (xmax = 0) as inserted",
                 (
@@ -307,7 +314,8 @@ class OlympicsScraper:
                 cursor.execute(
                     "INSERT INTO unit_competitors (event_unit_code, competitor_code, start_order) "
                     "VALUES (%s, %s, %s) "
-                    "ON CONFLICT (event_unit_code, competitor_code) DO NOTHING "
+                    "ON CONFLICT (event_unit_code, competitor_code) DO UPDATE SET "
+                    "start_order = EXCLUDED.start_order "
                     "RETURNING (xmax = 0) as inserted",
                     (event_unit_code, competitor['code'], competitor.get('order'))
                 )
