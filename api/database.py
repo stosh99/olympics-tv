@@ -2,9 +2,6 @@
 Database connection and pooling
 """
 
-from dotenv import load_dotenv
-load_dotenv()
-
 import psycopg2
 from psycopg2 import pool
 import logging
@@ -22,11 +19,11 @@ def init_connection_pool():
     try:
         connection_pool = psycopg2.pool.SimpleConnectionPool(
             1, 20,
-            host='127.0.0.1',
-            port=5432,
-            database='olympics_tv',
-            user='stosh99',
-            password='olympics_tv_dev'
+            host=os.getenv('DB_HOST', '127.0.0.1'),
+            port=int(os.getenv('DB_PORT', '5432')),
+            database=os.getenv('DB_NAME', 'olympics_tv'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD')
         )
         logger.info("Database connection pool initialized")
     except Exception as e:

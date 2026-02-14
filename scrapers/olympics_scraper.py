@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 
 # Database configuration
 DB_CONFIG = {
-    'host': '127.0.0.1',
-    'port': 5432,
-    'database': 'olympics_tv',
-    'user': 'stosh99',
-    'password': 'olympics_tv_dev'
+    'host': os.getenv('DB_HOST', '127.0.0.1'),
+    'port': int(os.getenv('DB_PORT', '5432')),
+    'database': os.getenv('DB_NAME', 'olympics_tv'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD')
 }
 
 # API configuration
