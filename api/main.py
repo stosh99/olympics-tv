@@ -16,7 +16,8 @@ from api.database import init_connection_pool, close_all_connections, execute_qu
 from api.models import (
     ScheduleResponse, Event, Competitor, Broadcast,
     TVResponse, BroadcastDetail, LinkedEvent, RundownSegment,
-    DatesResponse, DateInfo
+    DatesResponse, DateInfo,
+    EuroBroadcast, EuroTVResponse
 )
 
 # Configure logging
@@ -584,10 +585,58 @@ def search_events(q: str = Query(..., min_length=1)):
     return {"results": results, "count": len(results)}
 
 
-@app.get("/health")
-def health_check():
-    """Health check endpoint"""
-    return {"status": "ok"}
+@app.get("/api/euro/{date}", response_model=EuroTVResponse)
+def get_euro_schedule(date: str):
+    """Get European broadcast schedule for a given date, grouped by channel."""
+    # Validate date
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    query = """
+        SELECT
+            eb.broadcast_id,
+            eb.channel_code,
+            ec.display_name as channel_name,
+            ec.country_code,
+            ec.region,
+            eb.title_original,
+            eb.start_time,
+            eb.end_time,
+            eb.duration_minutes,
+            eb.is_live,
+            eb.is_replay
+        FROM euro_broadcasts eb
+        JOIN euro_channels ec ON eb.channel_code = ec.channel_code
+        WHERE DATE(eb.start_time) = %s
+        AND ec.is_active = TRUE
+        ORDER BY ec.country_code, ec.display_name, eb.start_time
+    """
+
+    broadcasts_data = execute_query_dict(query, (date,))
+
+    # Group by channel_code
+    channels = {}
+    for b in broadcasts_data:
+        ch = b['channel_code']
+        if ch not in channels:
+            channels[ch] = []
+        channels[ch].append(EuroBroadcast(
+            broadcast_id=b['broadcast_id'],
+            channel_code=b['channel_code'],
+            channel_name=b['channel_name'],
+            country_code=b['country_code'],
+            region=b['region'],
+            title_original=b['title_original'],
+            start_time=b['start_time'],
+            end_time=b['end_time'],
+            duration_minutes=b['duration_minutes'],
+            is_live=b['is_live'],
+            is_replay=b['is_replay'],
+        ))
+
+    return EuroTVResponse(date=date, channels=channels)
 
 
 if __name__ == "__main__":
