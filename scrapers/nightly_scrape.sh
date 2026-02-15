@@ -1,7 +1,7 @@
 #!/bin/bash
 # Crontab entry (add with: crontab -e)
 # Run nightly at 3:00 AM Eastern (scrapers re-fetch all dates, upsert changes)
-# 0 3 * * * /home/stosh/olympics-tv/scrapers/nightly_scrape.sh
+# 0 3 * * * /home/stosh99/PycharmProjects/olympics-tv/scrapers/nightly_scrape.sh
 
 # Olympics TV Schedule - Nightly Scraper Wrapper
 # This script runs both scrapers (Olympics.com and NBC) nightly to update
@@ -10,9 +10,9 @@
 set -euo pipefail
 
 # Production paths
-PROJECT_ROOT="/home/stosh/olympics-tv"
-VENV_ACTIVATE="$PROJECT_ROOT/.venv/bin/activate"
-LOG_DIR="/var/log/olympics-tv"
+PROJECT_ROOT="/home/stosh99/PycharmProjects/olympics-tv"
+VENV_ACTIVATE="$PROJECT_ROOT/venv/bin/activate"
+LOG_DIR="$HOME/.logs/olympics-tv"
 LOG_FILE="$LOG_DIR/nightly-scrape-$(date +%Y%m%d).log"
 
 # Create log directory if it doesn't exist
