@@ -14,16 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Calendar, ChevronLeft, ChevronRight, Globe, Tv, Check } from "lucide-react"
-import { NETWORKS, NETWORK_COLORS, getSportColor, type ViewMode } from "@/lib/schedule-data"
+import { NETWORKS, NETWORK_COLORS, COUNTRY_FLAGS, COUNTRY_COLORS, getSportColor, type ViewMode } from "@/lib/schedule-data"
 import {
   fetchTvSchedule,
   fetchTvScheduleRange,
   fetchOlympicSchedule,
   fetchOlympicScheduleRange,
+  fetchEuroScheduleRange,
   formatDateParam,
   generateDateRange,
   type TvScheduleResponse,
   type ScheduleResponse,
+  type EuroTVResponse,
 } from "@/lib/api"
 
 // All Olympic winter sports — always shown
@@ -274,6 +276,88 @@ function assignBandIndices(events: GridEvent[]): GridEvent[] {
   return sorted
 }
 
+// --- Infer discipline from multilingual Euro broadcast titles ---
+function inferDisciplineFromTitle(title: string): string {
+  const t = title.toLowerCase()
+  const disciplineMap: [string[], string][] = [
+    [['alpint', 'alpin', 'alpine', 'slalom', 'downhill', 'super-g', 'discesa', 'abfahrt', 'riesenslalom'], 'Alpine Skiing'],
+    [['biathlon', 'skiskyting', 'skidskytte'], 'Biathlon'],
+    [['bob', 'bobsleigh', 'bobsled'], 'Bobsleigh'],
+    [['langrenn', 'längd', 'fondo', 'fond', 'cross-country', 'staffetta', 'relay', 'skiathlon'], 'Cross-Country Skiing'],
+    [['curling'], 'Curling'],
+    [['kunstløp', 'konståkning', 'pattinaggio art', 'patinage art', 'figure skating', 'eiskunst'], 'Figure Skating'],
+    [['freestyle', 'moguls', 'halfpipe', 'slopestyle', 'big air', 'aerials'], 'Freestyle Skiing'],
+    [['hockey', 'ishockey', 'eishockey'], 'Ice Hockey'],
+    [['luge', 'rodel', 'rodeln', 'slittino', 'aking'], 'Luge'],
+    [['kombinert', 'kombination', 'combinata', 'combiné', 'nordic combined'], 'Nordic Combined'],
+    [['short track', 'shorttrack', 'kortbane'], 'Short Track Speed Skating'],
+    [['skeleton'], 'Skeleton'],
+    [['skihopp', 'backhoppning', 'salto', 'saut', 'ski jumping', 'skispringen'], 'Ski Jumping'],
+    [['snowboard'], 'Snowboard'],
+    [['skøyte', 'skridskor', 'speed skating', 'eisschnell', 'pattinaggio velocità', 'pikaluistelu'], 'Speed Skating'],
+  ]
+  for (const [keywords, discipline] of disciplineMap) {
+    if (keywords.some(kw => t.includes(kw))) return discipline
+  }
+  return 'Olympics'
+}
+
+// --- Convert Euro API data to grid events (grouped by channel) ---
+function euroToGridEvents(rangeData: Map<string, EuroTVResponse>): Map<string, Map<string, GridEvent[]>> {
+  const multiDayMap = new Map<string, Map<string, GridEvent[]>>()
+
+  for (const [date, dayData] of rangeData) {
+    for (const [channelCode, broadcasts] of Object.entries(dayData.channels)) {
+      for (const b of broadcasts) {
+        const start = new Date(b.start_time)
+        let end: Date
+        if (b.end_time) {
+          end = new Date(b.end_time)
+        } else if (b.duration_minutes) {
+          end = new Date(start.getTime() + b.duration_minutes * 60000)
+        } else {
+          end = new Date(start.getTime() + 60 * 60000)
+        }
+
+        const discipline = inferDisciplineFromTitle(b.title_original || '')
+        // Row key = "FLAG ChannelName" (e.g. "🇬🇧 BBC One")
+        const rowKey = `${COUNTRY_FLAGS[b.country_code] || ''} ${b.channel_name}`.trim()
+
+        if (!multiDayMap.has(rowKey)) {
+          multiDayMap.set(rowKey, new Map<string, GridEvent[]>())
+        }
+        if (!multiDayMap.get(rowKey)!.has(date)) {
+          multiDayMap.get(rowKey)!.set(date, [])
+        }
+
+        multiDayMap.get(rowKey)!.get(date)!.push({
+          id: b.broadcast_id,
+          name: b.title_original || 'Olympics',
+          discipline,
+          startTime: start,
+          endTime: end,
+          isLive: b.is_live,
+          isReplay: b.is_replay,
+          isMedal: false,
+          network: rowKey,
+          summary: null,
+          videoUrl: null,
+          venue: null,
+        })
+      }
+    }
+  }
+
+  // Assign band indices per channel per date
+  for (const [channel, dateMap] of multiDayMap.entries()) {
+    for (const [date, events] of dateMap.entries()) {
+      assignBandIndicesForDay(events)
+    }
+  }
+
+  return multiDayMap
+}
+
 // --- Convert API data to grid events ---
 
 function tvToGridEvents(rangeData: Map<string, TvScheduleResponse>): Map<string, Map<string, GridEvent[]>> {
@@ -367,6 +451,7 @@ export default function ScheduleGrid() {
   const [schedData, setSchedData] = useState<ScheduleResponse | null>(null)
   const [tvRangeData, setTvRangeData] = useState<Map<string, TvScheduleResponse> | null>(null)
   const [schedRangeData, setSchedRangeData] = useState<Map<string, ScheduleResponse> | null>(null)
+  const [euroRangeData, setEuroRangeData] = useState<Map<string, EuroTVResponse> | null>(null)
   const [loading, setLoading] = useState(true)
   const [maxConcurrentPerDay, setMaxConcurrentPerDay] = useState<
     Map<string, Map<string, number>>
@@ -392,6 +477,19 @@ export default function ScheduleGrid() {
           setTvRangeData(rangeData)
           // Calculate max concurrent for TV view
           const gridEvents = tvToGridEvents(rangeData)
+          const allDates = getAllOlympicDates()
+          try {
+            const maxConcurrent = calculateMaxConcurrentPerDay(gridEvents, allDates)
+            setMaxConcurrentPerDay(maxConcurrent)
+          } catch (calcErr) {
+            console.error("[CALCULATION ERROR]", calcErr)
+            setMaxConcurrentPerDay(new Map())
+          }
+        } else if (viewMode === "euro") {
+          const rangeData = await fetchEuroScheduleRange(startDate, endDate)
+          setEuroRangeData(rangeData)
+          // Calculate max concurrent for Euro view
+          const gridEvents = euroToGridEvents(rangeData)
           const allDates = getAllOlympicDates()
           try {
             const maxConcurrent = calculateMaxConcurrentPerDay(gridEvents, allDates)
@@ -538,8 +636,11 @@ export default function ScheduleGrid() {
     if (viewMode === "all" && schedRangeData) {
       return scheduleToGridEvents(schedRangeData)
     }
+    if (viewMode === "euro" && euroRangeData) {
+      return euroToGridEvents(euroRangeData)
+    }
     return new Map<string, Map<string, GridEvent[]>>()
-  }, [viewMode, tvRangeData, schedRangeData])
+  }, [viewMode, tvRangeData, schedRangeData, euroRangeData])
 
   // Disciplines that have events across all days
   const disciplinesWithEvents = useMemo(() => {
@@ -557,17 +658,22 @@ export default function ScheduleGrid() {
 
   const rows = useMemo(() => {
     if (viewMode === "tv") return NETWORKS as string[]
+    if (viewMode === "euro") {
+      // Euro view: use channel names from the data (e.g. "🇬🇧 BBC One")
+      const euroRows = Array.from(gridData.keys()).sort()
+      return euroRows
+    }
     return ALL_DISCIPLINES
-  }, [viewMode])
+  }, [viewMode, gridData])
 
   // Determine which rows to show based on filters
   const filteredRows = useMemo(() => {
     if (showCheckedOnly && checkedSports.size > 0) {
-      if (viewMode === "tv") {
+      if (viewMode === "tv" || viewMode === "euro") {
+        // TV & Euro: rows are networks/channels, filter by which have matching sport events
         return rows.filter((row) => {
           const dateMap = gridData.get(row)
           if (dateMap instanceof Map) {
-            // Check if any date has events matching filters
             for (const events of dateMap.values()) {
               if (events.some((e) => checkedSports.has(e.discipline))) return true
             }
@@ -578,11 +684,11 @@ export default function ScheduleGrid() {
       return rows.filter((row) => checkedSports.has(row))
     }
     if (selectedSport) {
-      if (viewMode === "tv") {
+      if (viewMode === "tv" || viewMode === "euro") {
+        // TV & Euro: rows are networks/channels, filter by which have matching sport events
         return rows.filter((row) => {
           const dateMap = gridData.get(row)
           if (dateMap instanceof Map) {
-            // Check if any date has events matching filters
             for (const events of dateMap.values()) {
               if (events.some((e) => e.discipline === selectedSport)) return true
             }
@@ -591,6 +697,18 @@ export default function ScheduleGrid() {
         })
       }
       return rows.filter((row) => row === selectedSport)
+    }
+    // For euro view, only show channels that have events
+    if (viewMode === "euro") {
+      return rows.filter((row) => {
+        const dateMap = gridData.get(row)
+        if (dateMap instanceof Map) {
+          for (const events of dateMap.values()) {
+            if (events.length > 0) return true
+          }
+        }
+        return false
+      })
     }
     return rows
   }, [rows, selectedSport, showCheckedOnly, checkedSports, viewMode, gridData])
@@ -723,41 +841,47 @@ export default function ScheduleGrid() {
         {/* Main Content - Inward from Rings */}
         <div className="relative flex flex-col md:flex-row items-center justify-between gap-4 px-4 md:px-[122px] max-w-full mx-auto">
           {/* Left: Large Toggle Buttons */}
-          <div className="flex gap-3 w-full md:w-auto">
-            {/* TV Schedule Button */}
+          <div className="flex gap-2 w-full md:w-auto">
+            {/* USA TV */}
             <button
-              className={`h-11 px-6 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`h-11 px-5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                 viewMode === "tv"
                   ? "bg-foreground text-background shadow-md"
                   : "bg-white border border-border text-foreground hover:bg-secondary hover:border-foreground/20"
               }`}
-              onClick={() => {
-                setViewMode("tv")
-                setSelectedSport(null)
-                setShowCheckedOnly(false)
-              }}
+              onClick={() => { setViewMode("tv"); setSelectedSport(null); setShowCheckedOnly(false); setCheckedSports(new Set()); }}
             >
               <Tv className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">TV Schedule</span>
-              <span className="sm:hidden">TV</span>
+              <span className="hidden sm:inline">USA TV</span>
+              <span className="sm:hidden">USA</span>
             </button>
 
-            {/* All Events Button */}
+            {/* All Events */}
             <button
-              className={`h-11 px-6 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`h-11 px-5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                 viewMode === "all"
                   ? "bg-foreground text-background shadow-md"
                   : "bg-white border border-border text-foreground hover:bg-secondary hover:border-foreground/20"
               }`}
-              onClick={() => {
-                setViewMode("all")
-                setSelectedSport(null)
-                setShowCheckedOnly(false)
-              }}
+              onClick={() => { setViewMode("all"); setSelectedSport(null); setShowCheckedOnly(false); setCheckedSports(new Set()); }}
             >
               <Globe className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Event Schedule</span>
+              <span className="hidden sm:inline">All Events</span>
               <span className="sm:hidden">All</span>
+            </button>
+
+            {/* Euro TV */}
+            <button
+              className={`h-11 px-5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
+                viewMode === "euro"
+                  ? "bg-foreground text-background shadow-md"
+                  : "bg-white border border-border text-foreground hover:bg-secondary hover:border-foreground/20"
+              }`}
+              onClick={() => { setViewMode("euro"); setSelectedSport(null); setShowCheckedOnly(false); setCheckedSports(new Set()); }}
+            >
+              <Tv className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Euro TV</span>
+              <span className="sm:hidden">Euro</span>
             </button>
           </div>
 
@@ -921,6 +1045,10 @@ export default function ScheduleGrid() {
                           NETWORK_COLORS[row]?.bg || "bg-gray-500"
                         } ${NETWORK_COLORS[row]?.text || "text-white"}`}
                       >
+                        {row}
+                      </span>
+                    ) : viewMode === "euro" ? (
+                      <span className="px-2 py-1 text-xs font-semibold rounded whitespace-nowrap bg-slate-700 text-white max-w-[140px] truncate">
                         {row}
                       </span>
                     ) : (

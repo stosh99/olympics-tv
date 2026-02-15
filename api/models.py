@@ -85,6 +85,25 @@ class TVResponse(BaseModel):
     networks: dict
 
 
+class EuroBroadcast(BaseModel):
+    broadcast_id: str
+    channel_code: str
+    channel_name: str
+    country_code: str
+    region: str
+    title_original: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
+    is_live: bool = False
+    is_replay: bool = False
+
+
+class EuroTVResponse(BaseModel):
+    date: str
+    channels: dict  # channel_code -> list of EuroBroadcast
+
+
 class DateInfo(BaseModel):
     date: str
     total_events: int
