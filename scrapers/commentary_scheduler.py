@@ -160,18 +160,21 @@ def populate_results():
 
 
 def get_post_event_pending():
-    """Find events with results in the last 24 hours without post_event commentary."""
+    """Find events with results in the last 24 hours without post_event commentary. Excludes training."""
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
 
     cur.execute("""
         SELECT DISTINCT su.event_unit_code, d.name as discipline,
-               e.name as event, su.medal_flag, su.start_time
+               e.name as event, su.medal_flag, su.start_time, su.event_unit_name
         FROM schedule_units su
         JOIN events e ON su.event_id = e.event_id
         JOIN disciplines d ON e.discipline_code = d.code
         JOIN results r ON r.event_unit_code = su.event_unit_code
         WHERE su.start_time >= NOW() - INTERVAL '24 hours'
+        AND LOWER(su.event_unit_name) NOT LIKE '%training%'
+        AND LOWER(su.event_unit_name) NOT LIKE '%practice%'
+        AND LOWER(su.event_unit_name) NOT LIKE '%warm%'
         AND su.event_unit_code NOT IN (
             SELECT event_unit_code FROM commentary
             WHERE commentary_type = 'post_event'
@@ -187,6 +190,7 @@ def get_post_event_pending():
         'event': row[2],
         'medal_flag': row[3],
         'start_time': row[4],
+        'unit_name': row[5],
     } for row in cur.fetchall()]
 
     cur.close()
@@ -195,7 +199,7 @@ def get_post_event_pending():
 
 
 def get_pre_event_pending():
-    """Find upcoming events in the next 24 hours without pre_event commentary."""
+    """Find upcoming events in the next 24 hours without pre_event commentary. Excludes training."""
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
 
@@ -208,6 +212,9 @@ def get_pre_event_pending():
         JOIN disciplines d ON e.discipline_code = d.code
         WHERE su.start_time > NOW()
         AND su.start_time <= NOW() + INTERVAL '24 hours'
+        AND LOWER(su.event_unit_name) NOT LIKE '%training%'
+        AND LOWER(su.event_unit_name) NOT LIKE '%practice%'
+        AND LOWER(su.event_unit_name) NOT LIKE '%warm%'
         AND su.event_unit_code NOT IN (
             SELECT event_unit_code FROM commentary
             WHERE commentary_type = 'pre_event'
@@ -257,14 +264,14 @@ def run_post_events(dry_run=False):
 
     for evt in events:
         try:
-            ok = process_event(evt['event_unit_code'])
+            ok = process_event(evt['event_unit_code'], commentary_type='post_event')
             if ok:
                 success += 1
             else:
                 failed += 1
         except Exception as e:
             logger.error(f"Error processing {evt['event_unit_code']}: {e}")
-            update_commentary_status(evt['event_unit_code'], 'failed', str(e)[:500])
+            update_commentary_status(evt['event_unit_code'], 'failed', str(e)[:500], 'post_event')
             failed += 1
 
     return success, failed

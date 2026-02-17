@@ -83,15 +83,15 @@ def get_pending_events(mode='all'):
     return events
 
 
-def update_commentary_status(event_unit_code, status, error_message=None):
+def update_commentary_status(event_unit_code, status, error_message=None, commentary_type='post_event'):
     """Update or insert commentary status in DB."""
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
-    
-    # Check if row exists
+
+    # Check if row exists for this specific event_unit_code + commentary_type
     cur.execute(
-        "SELECT id FROM commentary WHERE event_unit_code = %s",
-        (event_unit_code,)
+        "SELECT id FROM commentary WHERE event_unit_code = %s AND commentary_type = %s",
+        (event_unit_code, commentary_type)
     )
     existing = cur.fetchone()
 
@@ -99,19 +99,19 @@ def update_commentary_status(event_unit_code, status, error_message=None):
         if error_message:
             cur.execute("""
                 UPDATE commentary SET status = %s, error_message = %s, updated_at = NOW()
-                WHERE event_unit_code = %s
-            """, (status, error_message, event_unit_code))
+                WHERE event_unit_code = %s AND commentary_type = %s
+            """, (status, error_message, event_unit_code, commentary_type))
         else:
             cur.execute("""
                 UPDATE commentary SET status = %s, updated_at = NOW()
-                WHERE event_unit_code = %s
-            """, (status, event_unit_code))
+                WHERE event_unit_code = %s AND commentary_type = %s
+            """, (status, event_unit_code, commentary_type))
     else:
         cur.execute("""
-            INSERT INTO commentary (event_unit_code, commentary_type, commentary_date, 
+            INSERT INTO commentary (event_unit_code, commentary_type, commentary_date,
                                     status, created_at, updated_at)
-            VALUES (%s, 'post_event', NOW(), %s, NOW(), NOW())
-        """, (event_unit_code, status))
+            VALUES (%s, %s, NOW(), %s, NOW(), NOW())
+        """, (event_unit_code, commentary_type, status))
 
     conn.commit()
     cur.close()
@@ -172,7 +172,7 @@ def save_commentary(event_unit_code, content, proofed_content, sources_meta,
     logger.info(f"Saved commentary for {event_unit_code}")
 
 
-def process_event(event_unit_code, dry_run=False):
+def process_event(event_unit_code, dry_run=False, commentary_type='post_event'):
     """
     Full pipeline for a single event:
     resolve → scrape → write → edit → store
@@ -180,7 +180,7 @@ def process_event(event_unit_code, dry_run=False):
     from source_resolver import resolve_sources
 
     logger.info(f"\n{'='*60}")
-    logger.info(f"PROCESSING: {event_unit_code}")
+    logger.info(f"PROCESSING [{commentary_type}]: {event_unit_code}")
     logger.info(f"{'='*60}")
 
     # Step 1: Resolve sources
@@ -188,7 +188,7 @@ def process_event(event_unit_code, dry_run=False):
     resolved = resolve_sources(event_unit_code)
     if not resolved:
         logger.error(f"Failed to resolve sources for {event_unit_code}")
-        update_commentary_status(event_unit_code, 'failed', 'Source resolution failed')
+        update_commentary_status(event_unit_code, 'failed', 'Source resolution failed', commentary_type)
         return False
 
     logger.info(f"  Event: {resolved['event_label']}")
@@ -207,7 +207,7 @@ def process_event(event_unit_code, dry_run=False):
 
     # Step 2: Scrape
     logger.info("Step 2: Scraping sources...")
-    update_commentary_status(event_unit_code, 'scraping')
+    update_commentary_status(event_unit_code, 'scraping', commentary_type=commentary_type)
     
     articles = scrape_for_event(resolved)
     if not articles:
@@ -225,12 +225,12 @@ def process_event(event_unit_code, dry_run=False):
 
     # Step 3: Write commentary
     logger.info("Step 3: Writing commentary...")
-    update_commentary_status(event_unit_code, 'writing')
+    update_commentary_status(event_unit_code, 'writing', commentary_type=commentary_type)
     
     writer_result = write_commentary(consolidated)
     if not writer_result:
         logger.error(f"Commentary writing failed for {event_unit_code}")
-        update_commentary_status(event_unit_code, 'failed', 'Writer LLM call failed')
+        update_commentary_status(event_unit_code, 'failed', 'Writer LLM call failed', commentary_type)
         return False
     
     content = writer_result['content']
