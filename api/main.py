@@ -17,7 +17,8 @@ from api.models import (
     ScheduleResponse, Event, Competitor, Broadcast,
     TVResponse, BroadcastDetail, LinkedEvent, RundownSegment,
     DatesResponse, DateInfo,
-    EuroBroadcast, EuroTVResponse
+    EuroBroadcast, EuroTVResponse,
+    CommentaryItem, CommentaryResponse, ResultSummary
 )
 
 # Configure logging
@@ -637,6 +638,148 @@ def get_euro_schedule(date: str):
         ))
 
     return EuroTVResponse(date=date, channels=channels)
+
+
+@app.get("/api/commentary", response_model=CommentaryResponse)
+def get_commentary(date: Optional[str] = None):
+    """
+    Get commentary for the 3-column layout:
+    - previews: pre_event commentary for upcoming events
+    - today_recaps: post_event commentary from today
+    - previous_recaps: post_event commentary from previous days
+    """
+    from datetime import date as date_type, timedelta
+
+    if date:
+        try:
+            target = datetime.strptime(date, '%Y-%m-%d').date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        target = date_type.today()
+
+    tomorrow = target + timedelta(days=1)
+
+    # Helper to split first paragraph
+    def split_first_paragraph(content):
+        if not content:
+            return "", ""
+        paragraphs = content.strip().split('\n\n')
+        first = paragraphs[0] if paragraphs else content
+        full = content
+        return first.strip(), full.strip()
+
+    # Helper to build commentary items from query results
+    def build_items(rows):
+        items = []
+        for row in rows:
+            euc = row['event_unit_code']
+            first_para, full = split_first_paragraph(row['proofed_content'] or row['content'] or '')
+            if not first_para:
+                continue
+
+            # Get results for this event
+            results_data = execute_query_dict("""
+                SELECT competitor_name, noc, position, mark, medal_type, winner_loser_tie
+                FROM results
+                WHERE event_unit_code = %s
+                ORDER BY CASE
+                    WHEN medal_type = 'ME_GOLD' THEN 1
+                    WHEN medal_type = 'ME_SILVER' THEN 2
+                    WHEN medal_type = 'ME_BRONZE' THEN 3
+                    ELSE 4 END,
+                position NULLS LAST
+                LIMIT 5
+            """, (euc,))
+
+            results = [
+                ResultSummary(
+                    name=r['competitor_name'],
+                    noc=r['noc'],
+                    position=r['position'],
+                    mark=r['mark'],
+                    medal_type=r['medal_type'],
+                    wlt=r['winner_loser_tie']
+                )
+                for r in results_data
+            ]
+
+            items.append(CommentaryItem(
+                event_unit_code=euc,
+                commentary_type=row['commentary_type'],
+                discipline=row['discipline'] or 'Unknown',
+                event_name=row['event_name'] or 'Unknown',
+                event_date=row['start_time'],
+                medal_flag=bool(row['medal_flag']),
+                first_paragraph=first_para,
+                full_content=full,
+                status=row['status'],
+                updated_at=row['updated_at'],
+                results=results,
+            ))
+        return items
+
+    # 1. Previews: pre_event for upcoming events (tomorrow+), excluding any that already have post_event commentary
+    previews_data = execute_query_dict("""
+        SELECT c.event_unit_code, c.commentary_type, c.content, c.proofed_content,
+               c.status, c.updated_at,
+               d.name as discipline, e.name as event_name,
+               su.start_time, su.medal_flag
+        FROM commentary c
+        JOIN schedule_units su ON c.event_unit_code = su.event_unit_code
+        JOIN events e ON su.event_id = e.event_id
+        JOIN disciplines d ON e.discipline_code = d.code
+        WHERE c.commentary_type = 'pre_event'
+        AND c.status IN ('proofed', 'published')
+        AND su.start_time::date >= %s
+        AND NOT EXISTS (
+            SELECT 1 FROM commentary c2
+            WHERE c2.event_unit_code = c.event_unit_code
+            AND c2.commentary_type = 'post_event'
+            AND c2.status IN ('proofed', 'published')
+        )
+        ORDER BY su.medal_flag DESC, su.start_time
+    """, (tomorrow,))
+
+    # 2. Today's recaps: post_event from target date
+    today_data = execute_query_dict("""
+        SELECT c.event_unit_code, c.commentary_type, c.content, c.proofed_content,
+               c.status, c.updated_at,
+               d.name as discipline, e.name as event_name,
+               su.start_time, su.medal_flag
+        FROM commentary c
+        JOIN schedule_units su ON c.event_unit_code = su.event_unit_code
+        JOIN events e ON su.event_id = e.event_id
+        JOIN disciplines d ON e.discipline_code = d.code
+        WHERE c.commentary_type = 'post_event'
+        AND c.status IN ('proofed', 'published')
+        AND su.start_time::date = %s
+        ORDER BY su.medal_flag DESC, su.start_time DESC
+    """, (target,))
+
+    # 3. Previous recaps: post_event before target date (last 3 days)
+    three_days_ago = target - timedelta(days=3)
+    previous_data = execute_query_dict("""
+        SELECT c.event_unit_code, c.commentary_type, c.content, c.proofed_content,
+               c.status, c.updated_at,
+               d.name as discipline, e.name as event_name,
+               su.start_time, su.medal_flag
+        FROM commentary c
+        JOIN schedule_units su ON c.event_unit_code = su.event_unit_code
+        JOIN events e ON su.event_id = e.event_id
+        JOIN disciplines d ON e.discipline_code = d.code
+        WHERE c.commentary_type = 'post_event'
+        AND c.status IN ('proofed', 'published')
+        AND su.start_time::date < %s
+        AND su.start_time::date >= %s
+        ORDER BY su.start_time DESC
+    """, (target, three_days_ago))
+
+    return CommentaryResponse(
+        previews=build_items(previews_data),
+        today_recaps=build_items(today_data),
+        previous_recaps=build_items(previous_data),
+    )
 
 
 if __name__ == "__main__":

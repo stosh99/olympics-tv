@@ -113,3 +113,34 @@ class DateInfo(BaseModel):
 
 class DatesResponse(BaseModel):
     dates: List[DateInfo]
+
+
+# Commentary models
+
+class ResultSummary(BaseModel):
+    name: str
+    noc: str
+    position: Optional[int] = None
+    mark: Optional[str] = None
+    medal_type: Optional[str] = None
+    wlt: Optional[str] = None
+
+
+class CommentaryItem(BaseModel):
+    event_unit_code: str
+    commentary_type: str  # pre_event or post_event
+    discipline: str
+    event_name: str
+    event_date: Optional[datetime] = None
+    medal_flag: bool
+    first_paragraph: str
+    full_content: str
+    status: str
+    updated_at: Optional[datetime] = None
+    results: List[ResultSummary] = []
+
+
+class CommentaryResponse(BaseModel):
+    previews: List[CommentaryItem] = []
+    today_recaps: List[CommentaryItem] = []
+    previous_recaps: List[CommentaryItem] = []

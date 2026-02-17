@@ -82,6 +82,37 @@ export interface DatesResponse {
   dates: DateInfo[]
 }
 
+// --- Commentary Types ---
+
+export interface ResultSummary {
+  name: string
+  noc: string
+  position: number | null
+  mark: string | null
+  medal_type: string | null  // ME_GOLD, ME_SILVER, ME_BRONZE
+  wlt: string | null  // W, L, T for head-to-head
+}
+
+export interface CommentaryItem {
+  event_unit_code: string
+  commentary_type: "pre_event" | "post_event"
+  discipline: string
+  event_name: string
+  event_date: string | null
+  medal_flag: boolean
+  first_paragraph: string
+  full_content: string
+  status: string
+  updated_at: string | null
+  results: ResultSummary[]
+}
+
+export interface CommentaryResponse {
+  previews: CommentaryItem[]
+  today_recaps: CommentaryItem[]
+  previous_recaps: CommentaryItem[]
+}
+
 // --- Euro TV Types ---
 
 export interface EuroBroadcast {
@@ -120,6 +151,13 @@ export async function fetchOlympicSchedule(date: string): Promise<ScheduleRespon
 export async function fetchDates(): Promise<DatesResponse> {
   const res = await fetch(`${API_BASE}/api/dates`)
   if (!res.ok) throw new Error(`Failed to fetch dates: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchCommentary(date?: string): Promise<CommentaryResponse> {
+  const params = date ? `?date=${date}` : ''
+  const res = await fetch(`${API_BASE}/api/commentary${params}`)
+  if (!res.ok) throw new Error(`Failed to fetch commentary: ${res.status}`)
   return res.json()
 }
 
