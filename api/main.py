@@ -719,7 +719,7 @@ def get_commentary(date: Optional[str] = None):
             ))
         return items
 
-    # 1. Previews: pre_event for upcoming events (tomorrow+), excluding any that already have post_event commentary
+    # 1. Previews: pre_event for events where end_time > NOW (timezone-aware), excluding any that already have post_event commentary
     previews_data = execute_query_dict("""
         SELECT c.event_unit_code, c.commentary_type, c.content, c.proofed_content,
                c.status, c.updated_at,
@@ -731,7 +731,7 @@ def get_commentary(date: Optional[str] = None):
         JOIN disciplines d ON e.discipline_code = d.code
         WHERE c.commentary_type = 'pre_event'
         AND c.status IN ('proofed', 'published')
-        AND su.start_time::date >= %s
+        AND su.end_time > NOW()
         AND NOT EXISTS (
             SELECT 1 FROM commentary c2
             WHERE c2.event_unit_code = c.event_unit_code
@@ -739,7 +739,7 @@ def get_commentary(date: Optional[str] = None):
             AND c2.status IN ('proofed', 'published')
         )
         ORDER BY su.medal_flag DESC, su.start_time
-    """, (tomorrow,))
+    """)
 
     # 2. Today's recaps: post_event from target date
     today_data = execute_query_dict("""

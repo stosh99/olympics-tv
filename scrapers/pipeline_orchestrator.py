@@ -119,7 +119,7 @@ def update_commentary_status(event_unit_code, status, error_message=None):
 
 
 
-def save_commentary(event_unit_code, content, proofed_content, sources_meta, 
+def save_commentary(event_unit_code, content, proofed_content, sources_meta,
                      raw_scrape_data, writer_usage, editor_result):
     """Save completed commentary to DB."""
     conn = psycopg2.connect(**DB_CONFIG)
@@ -129,8 +129,18 @@ def save_commentary(event_unit_code, content, proofed_content, sources_meta,
     llm_model = writer_usage.get('model', '') if writer_usage else ''
     prompt_ver = writer_usage.get('prompt_version', '') if writer_usage else ''
 
+    # Extract token usage data
+    input_tokens = 0
+    output_tokens = 0
+    estimated_cost = 0.0
+    if writer_usage and 'usage' in writer_usage:
+        usage = writer_usage['usage']
+        input_tokens = usage.get('input_tokens', 0)
+        output_tokens = usage.get('output_tokens', 0)
+        estimated_cost = usage.get('estimated_cost', 0.0)
+
     cur.execute("""
-        UPDATE commentary SET 
+        UPDATE commentary SET
             content = %s,
             proofed_content = %s,
             sources = %s,
@@ -138,6 +148,9 @@ def save_commentary(event_unit_code, content, proofed_content, sources_meta,
             status = 'proofed',
             llm_model = %s,
             prompt_version = %s,
+            input_tokens = %s,
+            output_tokens = %s,
+            estimated_cost = %s,
             updated_at = NOW()
         WHERE event_unit_code = %s
     """, (
@@ -147,6 +160,9 @@ def save_commentary(event_unit_code, content, proofed_content, sources_meta,
         json.dumps({'consolidated_text': raw_scrape_data, 'corrections': corrections}),
         llm_model,
         prompt_ver,
+        input_tokens,
+        output_tokens,
+        estimated_cost,
         event_unit_code,
     ))
 

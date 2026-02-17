@@ -22,7 +22,9 @@ import sys
 import psycopg2
 import logging
 import argparse
-from datetime import datetime, timedelta
+import json
+import requests
+from datetime import datetime, timedelta, timezone
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,9 +40,127 @@ DB_CONFIG = {
     'password': os.getenv('DB_PASSWORD')
 }
 
+OLYMPICS_API_BASE = "https://www.olympics.com/wmr-owg2026/schedules/api/ENG/schedule/lite/day"
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Referer': 'https://www.olympics.com/'
+}
+
+
+def fetch_today_schedule():
+    """Fetch today's schedule from Olympics API"""
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    url = f"{OLYMPICS_API_BASE}/{today}"
+    logger.info(f"Fetching results from Olympics.com for {today}")
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch schedule: {e}")
+        return None
+
+
+def extract_results(unit):
+    """Extract result rows from a single unit's competitors"""
+    results = []
+    event_unit_code = unit['id'].rstrip('-')
+
+    for c in unit.get('competitors', []):
+        code = c.get('code')
+        if not code or code == 'TBD':
+            continue
+        r = c.get('results', {})
+        if not r:
+            continue
+
+        position = r.get('position')
+        if position:
+            try:
+                position = int(position)
+            except (ValueError, TypeError):
+                position = None
+
+        wlt = r.get('winnerLoserTie')
+        if wlt:
+            wlt = wlt[0]
+
+        results.append((
+            event_unit_code,
+            code,
+            c.get('noc'),
+            c.get('name'),
+            position,
+            r.get('mark'),
+            wlt,
+            r.get('medalType')
+        ))
+    return results
+
+
+def populate_results():
+    """Fetch today's results from Olympics.com and populate results table"""
+    data = fetch_today_schedule()
+    if not data:
+        logger.info("No schedule data received")
+        return
+
+    units = data.get('units', [])
+    if not units:
+        logger.info("No units in schedule")
+        return
+
+    conn = psycopg2.connect(**DB_CONFIG)
+    cur = conn.cursor()
+
+    # Get existing result units
+    cur.execute("SELECT DISTINCT event_unit_code FROM results")
+    existing = {row[0] for row in cur.fetchall()}
+
+    new_results = 0
+    new_events = []
+
+    for unit in units:
+        if unit.get('status') != 'FINISHED':
+            continue
+
+        event_unit_code = unit['id'].rstrip('-')
+
+        # Skip if we already have results for this event
+        if event_unit_code in existing:
+            continue
+
+        results = extract_results(unit)
+        if not results:
+            continue
+
+        for row in results:
+            try:
+                cur.execute("""
+                    INSERT INTO results (event_unit_code, competitor_code, noc,
+                        competitor_name, position, mark, winner_loser_tie,
+                        medal_type, detected_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (event_unit_code, competitor_code) DO NOTHING
+                """, row)
+                new_results += 1
+            except Exception as e:
+                logger.error(f"Insert error {row[0]}/{row[1]}: {e}")
+                conn.rollback()
+                continue
+
+        new_events.append(event_unit_code)
+        logger.info(f"  NEW RESULTS: {event_unit_code} ({len(results)} competitors)")
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    logger.info(f"Results: {len(new_events)} new events, {new_results} result rows added")
+
 
 def get_post_event_pending():
-    """Find FINISHED events in the last 24 hours without post_event commentary."""
+    """Find events with results in the last 24 hours without post_event commentary."""
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
 
@@ -51,8 +171,7 @@ def get_post_event_pending():
         JOIN events e ON su.event_id = e.event_id
         JOIN disciplines d ON e.discipline_code = d.code
         JOIN results r ON r.event_unit_code = su.event_unit_code
-        WHERE su.status = 'FINISHED'
-        AND su.start_time >= NOW() - INTERVAL '24 hours'
+        WHERE su.start_time >= NOW() - INTERVAL '24 hours'
         AND su.event_unit_code NOT IN (
             SELECT event_unit_code FROM commentary
             WHERE commentary_type = 'post_event'
@@ -207,6 +326,11 @@ if __name__ == '__main__':
     logger.info("COMMENTARY SCHEDULER")
     logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
+
+    # Step 1: Populate results before generating commentary
+    logger.info("")
+    logger.info("--- Populating Results ---")
+    populate_results()
 
     run_post = not args.pre_only
     run_pre = not args.post_only
