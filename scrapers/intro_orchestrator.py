@@ -58,13 +58,12 @@ def get_upcoming_events(target_date, mode='all'):
         FROM schedule_units su
         JOIN events e ON su.event_id = e.event_id
         JOIN disciplines d ON e.discipline_code = d.code
+        LEFT JOIN commentary c
+            ON c.event_unit_code = su.event_unit_code
+            AND c.commentary_type = 'pre_event'
+            AND c.content IS NOT NULL
         WHERE su.start_time::date = %s
-        AND su.event_unit_code NOT IN (
-            SELECT event_unit_code FROM commentary
-            WHERE commentary_type = 'pre_event'
-            AND status IN ('proofed', 'published', 'writing')
-            AND event_unit_code IS NOT NULL
-        )
+        AND c.id IS NULL
     """
 
     if mode == 'medals':

@@ -50,18 +50,18 @@ def get_pending_events(mode='all'):
     cur = conn.cursor()
 
     base_query = """
-        SELECT DISTINCT r.event_unit_code, d.name as discipline, 
+        SELECT DISTINCT r.event_unit_code, d.name as discipline,
                e.name as event, su.medal_flag, su.start_time
         FROM results r
         JOIN schedule_units su ON r.event_unit_code = su.event_unit_code
         JOIN events e ON su.event_id = e.event_id
         JOIN disciplines d ON e.discipline_code = d.code
+        LEFT JOIN commentary c
+            ON c.event_unit_code = r.event_unit_code
+            AND c.commentary_type = 'post_event'
+            AND c.content IS NOT NULL
         WHERE su.status = 'FINISHED'
-        AND r.event_unit_code NOT IN (
-            SELECT event_unit_code FROM commentary 
-            WHERE status IN ('published', 'proofed', 'writing', 'analyzing')
-            AND event_unit_code IS NOT NULL
-        )
+        AND c.id IS NULL
     """
 
     if mode == 'medals':
@@ -152,7 +152,7 @@ def save_commentary(event_unit_code, content, proofed_content, sources_meta,
             output_tokens = %s,
             estimated_cost = %s,
             updated_at = NOW()
-        WHERE event_unit_code = %s
+        WHERE event_unit_code = %s AND commentary_type = %s
     """, (
         content,
         proofed_content,
@@ -164,6 +164,7 @@ def save_commentary(event_unit_code, content, proofed_content, sources_meta,
         output_tokens,
         estimated_cost,
         event_unit_code,
+        'post_event',
     ))
 
     conn.commit()

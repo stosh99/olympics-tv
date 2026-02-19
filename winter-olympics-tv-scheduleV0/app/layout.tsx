@@ -104,6 +104,9 @@ export default function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        <script data-goatcounter="https://stosh99.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+      </head>
       <body className={`font-sans antialiased`}>
         <script
           type="application/ld+json"

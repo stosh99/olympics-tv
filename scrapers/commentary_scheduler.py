@@ -171,16 +171,15 @@ def get_post_event_pending():
         JOIN events e ON su.event_id = e.event_id
         JOIN disciplines d ON e.discipline_code = d.code
         JOIN results r ON r.event_unit_code = su.event_unit_code
+        LEFT JOIN commentary c
+            ON c.event_unit_code = su.event_unit_code
+            AND c.commentary_type = 'post_event'
+            AND c.content IS NOT NULL
         WHERE su.start_time >= NOW() - INTERVAL '24 hours'
         AND LOWER(su.event_unit_name) NOT LIKE '%training%'
         AND LOWER(su.event_unit_name) NOT LIKE '%practice%'
         AND LOWER(su.event_unit_name) NOT LIKE '%warm%'
-        AND su.event_unit_code NOT IN (
-            SELECT event_unit_code FROM commentary
-            WHERE commentary_type = 'post_event'
-            AND status IN ('published', 'proofed', 'writing', 'analyzing')
-            AND event_unit_code IS NOT NULL
-        )
+        AND c.id IS NULL
         ORDER BY su.medal_flag DESC, su.start_time
     """)
 
@@ -210,17 +209,16 @@ def get_pre_event_pending():
         FROM schedule_units su
         JOIN events e ON su.event_id = e.event_id
         JOIN disciplines d ON e.discipline_code = d.code
+        LEFT JOIN commentary c
+            ON c.event_unit_code = su.event_unit_code
+            AND c.commentary_type = 'pre_event'
+            AND c.content IS NOT NULL
         WHERE su.start_time > NOW()
         AND su.start_time <= NOW() + INTERVAL '24 hours'
         AND LOWER(su.event_unit_name) NOT LIKE '%training%'
         AND LOWER(su.event_unit_name) NOT LIKE '%practice%'
         AND LOWER(su.event_unit_name) NOT LIKE '%warm%'
-        AND su.event_unit_code NOT IN (
-            SELECT event_unit_code FROM commentary
-            WHERE commentary_type = 'pre_event'
-            AND status IN ('proofed', 'published', 'writing')
-            AND event_unit_code IS NOT NULL
-        )
+        AND c.id IS NULL
         ORDER BY su.medal_flag DESC, su.start_time
     """)
 

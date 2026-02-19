@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, ChevronUp, Medal, Eye, Calendar } from "lucide-react"
@@ -85,8 +85,12 @@ function ResultsDisplay({ results }: { results: ResultSummary[] }) {
   return null
 }
 
-function CommentaryCard({ item }: { item: CommentaryItem }) {
-  const [expanded, setExpanded] = useState(false)
+function CommentaryCard({ item, expandedCard, setExpandedCard }: {
+  item: CommentaryItem
+  expandedCard: string | null
+  setExpandedCard: (code: string | null) => void
+}) {
+  const expanded = expandedCard === item.event_unit_code
   const isPreview = item.commentary_type === "pre_event"
 
   return (
@@ -129,7 +133,7 @@ function CommentaryCard({ item }: { item: CommentaryItem }) {
               variant="ghost"
               size="sm"
               className="px-0 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setExpanded(!expanded)}
+              onClick={() => setExpandedCard(expanded ? null : item.event_unit_code)}
             >
               {expanded ? "Show less" : "Read more"}
               {expanded ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
@@ -146,10 +150,12 @@ function CommentaryCard({ item }: { item: CommentaryItem }) {
   )
 }
 
-function CommentaryColumn({ title, items, emptyMessage }: {
+function CommentaryColumn({ title, items, emptyMessage, expandedCard, setExpandedCard }: {
   title: string
   items: CommentaryItem[]
   emptyMessage: string
+  expandedCard: string | null
+  setExpandedCard: (code: string | null) => void
 }) {
   return (
     <div className="space-y-3">
@@ -164,13 +170,15 @@ function CommentaryColumn({ title, items, emptyMessage }: {
       ) : (
         <div className="space-y-3">
           {items.map((item) => (
-            <CommentaryCard key={item.event_unit_code} item={item} />
+            <CommentaryCard key={item.event_unit_code} item={item} expandedCard={expandedCard} setExpandedCard={setExpandedCard} />
           ))}
         </div>
       )}
     </div>
   )
 }
+
+const REFRESH_INTERVAL = 15 * 60 * 1000 // 15 minutes
 
 export default function DailyCommentary() {
   const [data, setData] = useState<{
@@ -179,11 +187,38 @@ export default function DailyCommentary() {
     previous_recaps: CommentaryItem[]
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [expandedCard, setExpandedCard] = useState<string | null>(null)
+  const pendingRefresh = useRef(false)
+  const expandedCardRef = useRef<string | null>(null)
 
+  // Keep ref in sync with state
+  useEffect(() => {
+    expandedCardRef.current = expandedCard
+  }, [expandedCard])
+
+  // When a card is collapsed and a refresh was deferred, trigger it now
+  useEffect(() => {
+    if (expandedCard === null && pendingRefresh.current) {
+      pendingRefresh.current = false
+      fetchCommentary().then(setData).catch(() => {})
+    }
+  }, [expandedCard])
+
+  // Initial fetch + 15-minute polling
   useEffect(() => {
     fetchCommentary()
       .then(setData)
       .catch((e) => setError(e.message))
+
+    const interval = setInterval(() => {
+      if (expandedCardRef.current !== null) {
+        pendingRefresh.current = true
+      } else {
+        fetchCommentary().then(setData).catch(() => {})
+      }
+    }, REFRESH_INTERVAL)
+
+    return () => clearInterval(interval)
   }, [])
 
   if (error) {
@@ -216,16 +251,22 @@ export default function DailyCommentary() {
           title="Coming Up"
           items={data.previews}
           emptyMessage="No previews yet"
+          expandedCard={expandedCard}
+          setExpandedCard={setExpandedCard}
         />
         <CommentaryColumn
           title="Today's Recaps"
           items={data.today_recaps}
           emptyMessage="No recaps yet for today"
+          expandedCard={expandedCard}
+          setExpandedCard={setExpandedCard}
         />
         <CommentaryColumn
           title="Recent"
           items={data.previous_recaps}
           emptyMessage="No recent recaps"
+          expandedCard={expandedCard}
+          setExpandedCard={setExpandedCard}
         />
       </div>
     </section>
