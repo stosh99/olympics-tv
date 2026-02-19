@@ -34,6 +34,15 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ date: string }> }
 ) {
+  // Block direct/external access — only allow same-origin browser requests
+  const referer = request.headers.get("referer") || ""
+  const isInternal =
+    referer.includes("watcholympics2026.com") ||
+    referer.includes("localhost")
+  if (!isInternal) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   const { date } = await params
 
   // Validate date format
