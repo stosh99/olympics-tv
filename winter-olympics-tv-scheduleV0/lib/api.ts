@@ -137,7 +137,7 @@ export interface EuroTVResponse {
 // --- API Functions ---
 
 export async function fetchTvSchedule(date: string): Promise<TvScheduleResponse> {
-  const res = await fetch(`${API_BASE}/api/tv/${date}`)
+  const res = await fetch(`/api/tv/${date}`)
   if (!res.ok) throw new Error(`Failed to fetch TV schedule: ${res.status}`)
   return res.json()
 }
