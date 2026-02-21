@@ -106,6 +106,7 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <script data-goatcounter="https://stosh99.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+        <script defer src="https://umami.watcholympics2026.com/script.js" data-website-id="5c2df690-6071-4d0c-940e-e5298a0854b9"></script>
       </head>
       <body className={`font-sans antialiased`}>
         <script
